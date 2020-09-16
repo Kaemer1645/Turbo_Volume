@@ -1,0 +1,5 @@
+<RCC>
+    <qresource prefix="/plugins/Turbo_volume" >
+        <file>icon.png</file>
+    </qresource>
+</RCC>
