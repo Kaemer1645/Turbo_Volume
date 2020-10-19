@@ -48,14 +48,14 @@
        <item row="7" column="0">
         <widget class="QLabel" name="label5">
          <property name="text">
-          <string> miejsca po przecinku H</string>
+          <string>The number of decimal spaces H</string>
          </property>
         </widget>
        </item>
        <item row="5" column="2">
         <widget class="QRadioButton" name="radioButton1">
          <property name="text">
-          <string>dolacz</string>
+          <string>Add</string>
          </property>
         </widget>
        </item>
@@ -94,7 +94,7 @@
        <item row="5" column="1">
         <widget class="QRadioButton" name="radioButton">
          <property name="text">
-          <string>utworz nowy</string>
+          <string>Create new</string>
          </property>
          <property name="checked">
           <bool>true</bool>
@@ -104,21 +104,21 @@
        <item row="9" column="2">
         <widget class="QPushButton" name="pushButton5">
          <property name="text">
-          <string>ustawienia domyslne</string>
+          <string>Default settings</string>
          </property>
         </widget>
        </item>
        <item row="1" column="0">
         <widget class="QLabel" name="label4">
          <property name="text">
-          <string>Tworzenie raportu</string>
+          <string>Create report</string>
          </property>
         </widget>
        </item>
        <item row="8" column="0">
         <widget class="QLabel" name="label6">
          <property name="text">
-          <string>miejsca po przecinku V</string>
+          <string>The number of decimal spaces V</string>
          </property>
         </widget>
        </item>
@@ -138,7 +138,7 @@
       </sizepolicy>
      </property>
      <property name="text">
-      <string>raport</string>
+      <string>Report</string>
      </property>
     </widget>
    </item>
@@ -155,7 +155,7 @@
    <item row="0" column="0">
     <widget class="QLabel" name="label1">
      <property name="text">
-      <string>wejscie</string>
+      <string>Select a layer:</string>
      </property>
     </widget>
    </item>
@@ -175,7 +175,7 @@
    <item row="1" column="0" rowspan="2">
     <widget class="QLabel" name="label3">
      <property name="text">
-      <string>H odniesienia</string>
+      <string>Reference level</string>
      </property>
     </widget>
    </item>
@@ -227,7 +227,7 @@
       </sizepolicy>
      </property>
      <property name="text">
-      <string>Opcje:</string>
+      <string>Options:</string>
      </property>
     </widget>
    </item>
@@ -240,14 +240,14 @@
       </sizepolicy>
      </property>
      <property name="text">
-      <string>Czy chcesz ograniczyć obszar?</string>
+      <string>Would you like to set limit of the area?</string>
      </property>
     </widget>
    </item>
    <item row="5" column="0">
     <widget class="QLabel" name="label">
      <property name="text">
-      <string>Granica</string>
+      <string>Boundary</string>
      </property>
     </widget>
    </item>
