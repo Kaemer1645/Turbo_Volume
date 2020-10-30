@@ -23,20 +23,18 @@
 """
 from qgis.PyQt.QtCore import QSettings, QTranslator, QCoreApplication
 from qgis.PyQt.QtGui import QIcon
-from qgis.PyQt.QtWidgets import QAction, QFileDialog
+from qgis.PyQt.QtWidgets import QAction
 #dodana funkcja dodawania rastrów roboczych na mape "QgsRasterLayer"
-from qgis.core import QgsProject, Qgis, QgsRasterLayer
+from qgis.core import QgsProject, Qgis
 from qgis.utils import iface
 # Initialize Qt resources from file resources.py
 from .resources import *
 # Import the code for the dialog
 from .Turbo_volume_dialog import TurboVolumeDialog
 # Import potrzebnych funkcji do podzielenia rastra
-import processing
-import os.path
+
 import os
-import datetime
-import math
+
 
 
 
@@ -199,189 +197,21 @@ class TurboVolume:
             self.dlg = TurboVolumeDialog()
 
             
-            #definiowanie akcji wykonywanych po kliknieciu przyciskow lub zmianie watosci
-            self.dlg.pushButton1.clicked.connect(self.select_output_file)
-            
-            self.dlg.button_box.accepted.connect(self.elevation)
-            self.dlg.button_box.accepted.connect(self.volume)
-            
-        self.dlg.pushButton3.clicked.connect(self.elevation)
-        self.dlg.pushButton3.clicked.connect(self.refMin)
-        self.dlg.pushButton4.clicked.connect(self.elevation)
-        self.dlg.pushButton4.clicked.connect(self.refMax)
-            
-        self.dlg.pushButton5.clicked.connect(self.defaultOptions)
-        self.dlg.checkBox.stateChanged.connect(self.reportCreatingOptions)
-        #nowy checkBox dla granicy
-        self.dlg.checkBox_granice.stateChanged.connect(self.elevation)
-        self.dlg.checkBox_granice.stateChanged.connect(self.delete_work)
-        
-        self.dlg.spinBox.valueChanged.connect(self.HDecimalsChange)
-            
-        self.layers = QgsProject.instance().layerTreeRoot().children()
-        
-        self.dlg.comboBox1.clear()
-        self.dlg.comboBox1.addItems([layer.name() for layer in self.layers])
-        
-        #nowy comboBox dla granicy obszaru
-        self.dlg.comboBox_granica.clear()
-        self.dlg.comboBox_granica.addItems([layer.name() for layer in self.layers])
-        
-        self.dlg.lineEdit1.clear()
-        self.dlg.doubleSpinBox.setValue(0)
+
         
 
 
- # show the dialog
+         # show the dialog
         self.dlg.show()
         # Run the dialog event loop
         result = self.dlg.exec_()
         # See if OK was pressed
         if result:
             self.iface.messageBar().pushMessage(
-                "Success  "+"cut = "+str(self.cut)+"  fill = "+str(self.fill), level=Qgis.Success, duration=4)
-            self.createReport()
-            self.delete_work()
+                "Success  "+"cut = "+str(self.dlg.cut)+"  fill = "+str(self.dlg.fill), level=Qgis.Success, duration=4)
+            self.dlg.createReport()
+            self.dlg.delete_work()
         else:
-            self.defaultOptions()
+            self.dlg.defaultOptions()
     
-    #wybor pliku wyjsciowego    
-    def select_output_file(self):
-        filename, _filter = QFileDialog.getSaveFileName(
-            self.dlg, "select output text file", "", "*.txt")
-        self.dlg.lineEdit1.setText(filename)
-    
-    #usuwanie warstw roboczych (przy wycinaniu tworzą się dwa pliki
-    #jest to wynikiem specyfikacji formatu tiff)
-    def delete_work(self):
-        if self.dlg.checkBox_granice.isChecked():
-            resztki = self.outputroboczy + ".aux.xml"
-            os.remove(self.outputroboczy)
-            os.remove(resztki)
-    #odczyt danych z rastra
-    def elevation(self):
-        selectedLayerIndex=self.dlg.comboBox1.currentIndex()
-        layer=self.layers[selectedLayerIndex].layer()
-        #wycinanie konkretnego obszaru za pomocą warstwy z poligonem
-        if self.dlg.checkBox_granice.isChecked():
-            #tworzenie warstwy roboczej za pomocą warstwy wejściowej" 
-            filename = layer.dataProvider().dataSourceUri()
-            self.outputroboczy = filename[:-4] + "robb.tif"
-            granicabyIndex = self.dlg.comboBox_granica.currentIndex()
-            granica = self.layers[granicabyIndex].layer()
-            processing.run('gdal:cliprasterbymasklayer',{'INPUT': layer,
-                'MASK': granica,
-                'ALPHA_BAND': False,
-                'CROP_TO_CUTLINE': True,
-                'KEEP_RESOLUTION': False,
-                'OPTIONS': "",
-                'DATA_TYPE': 0,
-                'OUTPUT': self.outputroboczy})
-            layer = QgsRasterLayer(self.outputroboczy, "layer name you like")
-        else:    #niestety konieczne jest podanie dowolnej wartości ponieważ inaczej niż przez return nie dałem rady wydobyć ścieżki
-            self.outputroboczy = "brak" 
-            
-        provider = layer.dataProvider()
-        extent=provider.extent()
-        rows=layer.height()
-        cols=layer.width() 
-        noData=provider.sourceNoDataValue(1) #odczytanie wartosci braku danych (1 to numer kanału)
-        block=provider.block(1, extent, cols, rows)
-        
-        self.hdecimals=self.dlg.spinBox.value()
-        
-        #odczytanie wymiarow piksela
-        self.pSizeX=layer.rasterUnitsPerPixelX()
-        self.pSizeY=layer.rasterUnitsPerPixelY()
-        
-        self.list=[] #utworzenie pustej listy do zapisu wartosci pikseli 
-        
-        #odczyt wartości każdego piksela (z pominieciem braku danych) i zapis do listy
-        for r in range(rows):
-            for c in range(cols):
-                if block.value(r,c)==noData:
-                    continue
-                else:
-                    self.list.append(block.value(r,c))
 
-        return self.list, self.pSizeX, self.pSizeY, self.hdecimals, self.outputroboczy
-    
-    #obliczenie objetosci na podstawie: wysokosci plaszczyzny odniesienia, powierzchni piksela, wartosci pikseli
-    def volume(self):
-        #zalozenia poczatkowe
-        self.refer=0
-        self.cut=0
-        self.fill=0
-        
-        self.pArea=self.pSizeX*self.pSizeY #policzenie powierzchni piksela
-        self.refer=self.dlg.doubleSpinBox.value() #odczytanie wpisanej wysokosci plaszczyzny odniesienia
-        
-        #obliczenie objetosci nasypow i wykopow
-        for pix in self.list:
-            pix=round(pix,self.hdecimals)
-            if pix>self.refer:
-                self.cut=self.cut+self.pArea*(pix-self.refer)
-            else:
-                self.fill=self.fill+self.pArea*(pix-self.refer)
-        
-        #liczba miejsc po przecinku
-        vdecimals=self.dlg.spinBox2.value()
-        self.cut=round(self.cut,vdecimals)
-        self.fill=round(self.fill,vdecimals)
-        
-        return self.cut, self.fill, self.refer
-    
-    #odszukanie wysokosci minimalnej na danym rastrze i wpisanie do okna z wysokoscia plaszczyzny odniesienia   
-    def refMin(self):
-        self.dlg.doubleSpinBox.setValue(min(self.list))
-    
-    #odszukanie wysokosci maksymalnej na danym rastrze i wpisanie do okna z wysokoscia plaszczyzny odniesienia     
-    def refMax(self):
-        self.dlg.doubleSpinBox.setValue(max(self.list))
-    
-    #utworzenie raportu txt    
-    def createReport(self):
-        time=datetime.datetime.now()
-        
-        report=("time: "+str(time)+"\n\n"+
-        "H min = "+str(round(min(self.list),self.hdecimals))+"\n"+
-        "H max = "+str(round(max(self.list),self.hdecimals))+"\n\n"+
-        "H reference = "+str(self.refer)+"\n"+
-        "cut = "+str(self.cut)+"\n"+
-        "fill = "+str(self.fill)+"\n")
-        
-        #tworzenie nowego raportu lub dopisywanie do istniejącego (tylko jeśli jest zaznaczona opcja tworzenia raportu)
-        if self.dlg.checkBox.isChecked():
-            if self.dlg.radioButton.isChecked():
-                outputReport = open( self.dlg.lineEdit1.text(), "w")
-                outputReport.writelines(report)
-                outputReport.close()
-            else:
-                outputReport = open( self.dlg.lineEdit1.text(), "a")
-                outputReport.writelines(report)
-                outputReport.close()
-    
-    #wlaczanie i wylacznie dostepnosci wprowadzania sciezki raportu oraz wyboru rodzaju nowy/dopisz, w zaleznosci czy opcja tworzenia raportu jest zaznaczona
-    def reportCreatingOptions (self):
-        if self.dlg.checkBox.isChecked():
-            self.dlg.lineEdit1.setEnabled(1)
-            self.dlg.pushButton1.setEnabled(1)
-            self.dlg.radioButton.setEnabled(1)
-            self.dlg.radioButton1.setEnabled(1)
-        else:
-            self.dlg.lineEdit1.setEnabled(0)
-            self.dlg.pushButton1.setEnabled(0)
-            self.dlg.radioButton.setEnabled(0)
-            self.dlg.radioButton1.setEnabled(0)
-            
-    #definiowanie ustawien domyslnych
-    def defaultOptions (self):
-        self.dlg.checkBox.setChecked(1)
-        self.dlg.radioButton.setChecked(1)
-        self.dlg.spinBox.setValue(3)
-        self.dlg.spinBox2.setValue(3)
-    
-    #zmiana ilosci miejsc po przecinku dla wprowadzania wysokosci odniesienia
-    def HDecimalsChange (self):
-        hdecimals=self.dlg.spinBox.value()
-        self.dlg.doubleSpinBox.setDecimals(hdecimals)

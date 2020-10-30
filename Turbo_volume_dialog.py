@@ -26,6 +26,15 @@ import os
 
 from qgis.PyQt import uic
 from qgis.PyQt import QtWidgets
+from qgis.core import QgsMapLayerProxyModel, QgsRasterLayer
+from qgis.PyQt.QtWidgets import QFileDialog
+
+import datetime
+import math
+import processing
+
+
+
 
 # This loads your .ui file so that PyQt can populate your plugin with the elements from Qt Designer
 FORM_CLASS, _ = uic.loadUiType(os.path.join(
@@ -42,3 +51,169 @@ class TurboVolumeDialog(QtWidgets.QDialog, FORM_CLASS):
         # http://qt-project.org/doc/qt-4.8/designer-using-a-ui-file.html
         # #widgets-and-dialogs-with-auto-connect
         self.setupUi(self)
+
+        # definiowanie akcji wykonywanych po kliknieciu przyciskow lub zmianie watosci
+        self.pbPath.clicked.connect(self.select_output_file)
+        self.button_box.accepted.connect(self.elevation)
+        self.button_box.accepted.connect(self.volume)
+        self.pbMin.clicked.connect(self.elevation)
+        self.pbMin.clicked.connect(self.refMin)
+        self.pbMax.clicked.connect(self.elevation)
+        self.pbMax.clicked.connect(self.refMax)
+        self.pbDefault.clicked.connect(self.defaultOptions)
+        self.chbReport.stateChanged.connect(self.reportCreatingOptions)
+        # nowy checkBox dla granicy
+        self.checkBox_granice.stateChanged.connect(self.elevation)
+        self.checkBox_granice.stateChanged.connect(self.delete_work)
+        self.sbDecSpacesH.valueChanged.connect(self.HDecimalsChange)
+
+        self.layers = self.cmbSelectLayer.currentLayer()
+        self.cmbSelectLayer.setFilters(QgsMapLayerProxyModel.RasterLayer)
+
+        # nowy comboBox dla granicy obszaru
+        self.granica = self.comboBox_granica.currentLayer()
+        self.comboBox_granica.setFilters(QgsMapLayerProxyModel.VectorLayer)
+
+
+        self.leReport.clear()
+        self.dsbReference.setValue(0)
+
+    # wybor pliku wyjsciowego
+    def select_output_file(self):
+        filename, _filter = QFileDialog.getSaveFileName(
+            self, "select output text file", "", "*.txt")
+        self.leReport.setText(filename)
+
+    # usuwanie warstw roboczych (przy wycinaniu tworzą się dwa pliki
+    # jest to wynikiem specyfikacji formatu tiff)
+    def delete_work(self):
+        if self.checkBox_granice.isChecked():
+            resztki = self.outputroboczy + ".aux.xml"
+            os.remove(self.outputroboczy)
+            os.remove(resztki)
+
+    # odczyt danych z rastra
+    def elevation(self):
+        layer = self.cmbSelectLayer.currentLayer()
+        # wycinanie konkretnego obszaru za pomocą warstwy z poligonem
+        if self.checkBox_granice.isChecked():
+            # tworzenie warstwy roboczej za pomocą warstwy wejściowej"
+            filename = layer.dataProvider().dataSourceUri()
+            self.outputroboczy = filename[:-4] + "robb.tif"
+            granica = self.comboBox_granica.currentLayer()
+            processing.run('gdal:cliprasterbymasklayer', {'INPUT': layer,
+                                                          'MASK': granica,
+                                                          'ALPHA_BAND': False,
+                                                          'CROP_TO_CUTLINE': True,
+                                                          'KEEP_RESOLUTION': False,
+                                                          'OPTIONS': "",
+                                                          'DATA_TYPE': 0,
+                                                          'OUTPUT': self.outputroboczy})
+            layer = QgsRasterLayer(self.outputroboczy, "layer name you like")
+        else:  # niestety konieczne jest podanie dowolnej wartości ponieważ inaczej niż przez return nie dałem rady wydobyć ścieżki
+            self.outputroboczy = "brak"
+
+        provider = layer.dataProvider()
+        extent = provider.extent()
+        rows = layer.height()
+        cols = layer.width()
+        noData = provider.sourceNoDataValue(1)  # odczytanie wartosci braku danych (1 to numer kanału)
+        block = provider.block(1, extent, cols, rows)
+
+        self.hdecimals = self.sbDecSpacesH.value()
+
+        # odczytanie wymiarow piksela
+        self.pSizeX = layer.rasterUnitsPerPixelX()
+        self.pSizeY = layer.rasterUnitsPerPixelY()
+
+        self.list = []  # utworzenie pustej listy do zapisu wartosci pikseli
+
+        # odczyt wartości każdego piksela (z pominieciem braku danych) i zapis do listy
+        for r in range(rows):
+            for c in range(cols):
+                if block.value(r, c) == noData:
+                    continue
+                else:
+                    self.list.append(block.value(r, c))
+
+        return self.list, self.pSizeX, self.pSizeY, self.hdecimals, self.outputroboczy
+
+    # obliczenie objetosci na podstawie: wysokosci plaszczyzny odniesienia, powierzchni piksela, wartosci pikseli
+    def volume(self):
+        # zalozenia poczatkowe
+        self.refer = 0
+        self.cut = 0
+        self.fill = 0
+
+        self.pArea = self.pSizeX * self.pSizeY  # policzenie powierzchni piksela
+        self.refer = self.dsbReference.value()  # odczytanie wpisanej wysokosci plaszczyzny odniesienia
+
+        # obliczenie objetosci nasypow i wykopow
+        for pix in self.list:
+            pix = round(pix, self.hdecimals)
+            if pix > self.refer:
+                self.cut = self.cut + self.pArea * (pix - self.refer)
+            else:
+                self.fill = self.fill + self.pArea * (pix - self.refer)
+
+        # liczba miejsc po przecinku
+        vdecimals = self.sbDecSpaceV.value()
+        self.cut = round(self.cut, vdecimals)
+        self.fill = round(self.fill, vdecimals)
+
+        return self.cut, self.fill, self.refer
+
+    # odszukanie wysokosci minimalnej na danym rastrze i wpisanie do okna z wysokoscia plaszczyzny odniesienia
+    def refMin(self):
+        self.dsbReference.setValue(min(self.list))
+
+    # odszukanie wysokosci maksymalnej na danym rastrze i wpisanie do okna z wysokoscia plaszczyzny odniesienia
+    def refMax(self):
+        self.dsbReference.setValue(max(self.list))
+
+    # utworzenie raportu txt
+    def createReport(self):
+        time = datetime.datetime.now()
+
+        report = ("time: " + str(time) + "\n\n" +
+                  "H min = " + str(round(min(self.list), self.hdecimals)) + "\n" +
+                  "H max = " + str(round(max(self.list), self.hdecimals)) + "\n\n" +
+                  "H reference = " + str(self.refer) + "\n" +
+                  "cut = " + str(self.cut) + "\n" +
+                  "fill = " + str(self.fill) + "\n")
+
+        # tworzenie nowego raportu lub dopisywanie do istniejącego (tylko jeśli jest zaznaczona opcja tworzenia raportu)
+        if self.chbReport.isChecked():
+            if self.rbCreateNew.isChecked():
+                outputReport = open(self.leReport.text(), "w")
+                outputReport.writelines(report)
+                outputReport.close()
+            else:
+                outputReport = open(self.leReport.text(), "a")
+                outputReport.writelines(report)
+                outputReport.close()
+
+    # wlaczanie i wylacznie dostepnosci wprowadzania sciezki raportu oraz wyboru rodzaju nowy/dopisz, w zaleznosci czy opcja tworzenia raportu jest zaznaczona
+    def reportCreatingOptions(self):
+        if self.chbReport.isChecked():
+            self.leReport.setEnabled(1)
+            self.pushButton1.setEnabled(1)
+            self.rbCreateNew.setEnabled(1)
+            self.rbAdd.setEnabled(1)
+        else:
+            self.leReport.setEnabled(0)
+            self.pushButton1.setEnabled(0)
+            self.rbCreateNew.setEnabled(0)
+            self.rbAdd.setEnabled(0)
+
+    # definiowanie ustawien domyslnych
+    def defaultOptions(self):
+        self.chbReport.setChecked(1)
+        self.rbCreateNew.setChecked(1)
+        self.sbDecSpacesH.setValue(3)
+        self.sbDecSpaceV.setValue(3)
+
+    # zmiana ilosci miejsc po przecinku dla wprowadzania wysokosci odniesienia
+    def HDecimalsChange(self):
+        hdecimals = self.sbDecSpacesH.value()
+        self.dsbReference.setDecimals(hdecimals)
