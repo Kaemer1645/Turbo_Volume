@@ -28,13 +28,15 @@ from qgis.PyQt import uic
 from qgis.PyQt import QtWidgets
 from qgis.core import QgsMapLayerProxyModel, QgsRasterLayer
 from qgis.PyQt.QtWidgets import QFileDialog
+from qgis.utils import iface
 
-import datetime
+from datetime import datetime
 import math
 import processing
 
 
-
+from osgeo import gdal
+import numpy as np
 
 # This loads your .ui file so that PyQt can populate your plugin with the elements from Qt Designer
 FORM_CLASS, _ = uic.loadUiType(os.path.join(
@@ -94,14 +96,14 @@ class TurboVolumeDialog(QtWidgets.QDialog, FORM_CLASS):
 
     # odczyt danych z rastra
     def elevation(self):
-        layer = self.cmbSelectLayer.currentLayer()
+        self.layer = self.cmbSelectLayer.currentLayer()
         # wycinanie konkretnego obszaru za pomocą warstwy z poligonem
         if self.checkBox_granice.isChecked():
             # tworzenie warstwy roboczej za pomocą warstwy wejściowej"
-            filename = layer.dataProvider().dataSourceUri()
+            filename = self.layer.dataProvider().dataSourceUri()
             self.outputroboczy = filename[:-4] + "robb.tif"
             granica = self.comboBox_granica.currentLayer()
-            processing.run('gdal:cliprasterbymasklayer', {'INPUT': layer,
+            processing.run('gdal:cliprasterbymasklayer', {'INPUT': self.layer,
                                                           'MASK': granica,
                                                           'ALPHA_BAND': False,
                                                           'CROP_TO_CUTLINE': True,
@@ -113,18 +115,18 @@ class TurboVolumeDialog(QtWidgets.QDialog, FORM_CLASS):
         else:  # niestety konieczne jest podanie dowolnej wartości ponieważ inaczej niż przez return nie dałem rady wydobyć ścieżki
             self.outputroboczy = "brak"
 
-        provider = layer.dataProvider()
+        provider = self.layer.dataProvider()
         extent = provider.extent()
-        rows = layer.height()
-        cols = layer.width()
+        rows = self.layer.height()
+        cols = self.layer.width()
         noData = provider.sourceNoDataValue(1)  # odczytanie wartosci braku danych (1 to numer kanału)
         block = provider.block(1, extent, cols, rows)
 
         self.hdecimals = self.sbDecSpacesH.value()
 
         # odczytanie wymiarow piksela
-        self.pSizeX = layer.rasterUnitsPerPixelX()
-        self.pSizeY = layer.rasterUnitsPerPixelY()
+        self.pSizeX = self.layer.rasterUnitsPerPixelX()
+        self.pSizeY = self.layer.rasterUnitsPerPixelY()
 
         self.list = []  # utworzenie pustej listy do zapisu wartosci pikseli
 
@@ -139,7 +141,10 @@ class TurboVolumeDialog(QtWidgets.QDialog, FORM_CLASS):
         return self.list, self.pSizeX, self.pSizeY, self.hdecimals, self.outputroboczy
 
     # obliczenie objetosci na podstawie: wysokosci plaszczyzny odniesienia, powierzchni piksela, wartosci pikseli
-    def volume(self):
+    '''def volume(self):
+        startTime = datetime.now()
+        print('START',startTime)
+
         # zalozenia poczatkowe
         self.refer = 0
         self.cut = 0
@@ -160,8 +165,36 @@ class TurboVolumeDialog(QtWidgets.QDialog, FORM_CLASS):
         vdecimals = self.sbDecSpaceV.value()
         self.cut = round(self.cut, vdecimals)
         self.fill = round(self.fill, vdecimals)
+        print('STOP', datetime.now() - startTime)
+        return self.cut, self.fill, self.refer'''
+
+    # obliczenie objetosci na podstawie: wysokosci plaszczyzny odniesienia, powierzchni piksela, wartosci pikseli
+    def volume(self):
+
+        # startTime = datetime.now()
+        # print('START',startTime)
+
+        raster_path = iface.activeLayer().source()
+        ds = gdal.Open(raster_path)
+        band = ds.GetRasterBand(1)
+        r = band.ReadAsArray()
+        r[r == band.GetNoDataValue()] = np.nan
+        transform = ds.GetGeoTransform()
+        pixel_x = abs(transform[1])
+        pixel_y = abs(transform[5])
+        pixel_area = pixel_x * pixel_y
+        #print(['x',pixel_x,'y',pixel_y,'area',pixel_area])
+        self.refer = self.dsbReference.value()
+        self.fill = np.nansum(pixel_area * (r[r < self.refer] - self.refer))
+        self.cut = np.nansum(pixel_area * (r[r > self.refer] - self.refer))
+        #print(self.fill, self.cut)
+
+        #print('STOP',datetime.now() - startTime)
 
         return self.cut, self.fill, self.refer
+
+
+
 
     # odszukanie wysokosci minimalnej na danym rastrze i wpisanie do okna z wysokoscia plaszczyzny odniesienia
     def refMin(self):
@@ -173,7 +206,7 @@ class TurboVolumeDialog(QtWidgets.QDialog, FORM_CLASS):
 
     # utworzenie raportu txt
     def createReport(self):
-        time = datetime.datetime.now()
+        time = datetime.now()
 
         report = ("time: " + str(time) + "\n\n" +
                   "H min = " + str(round(min(self.list), self.hdecimals)) + "\n" +
