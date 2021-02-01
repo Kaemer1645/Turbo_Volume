@@ -5,8 +5,8 @@
 #							 -------------------
 #		begin				: 2020-03-07
 #		git sha				: $Format:%H$
-#		copyright			: (C) 2020 by Szymek Sleczka
-#		email				: szymex23@o2.pl
+#		copyright			: (C) 2020 by KNGK_GEOINFORMATYKA
+#		email				: kngk.ggiis@gmail.com
 # ***************************************************************************/
 #
 #/***************************************************************************

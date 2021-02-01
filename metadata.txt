@@ -7,7 +7,7 @@ name=Turbo Volume
 qgisMinimumVersion=3.0
 description=This plugin calculate volume from raster
 version=0.1
-author=KNGK Geoinformatyka
+author=KNGK_GEOINFORMATYKA
 email=kngk.ggiis@gmail.com
 
 about=This plugin calculate volume from raster
