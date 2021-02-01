@@ -230,12 +230,12 @@ class TurboVolumeDialog(QtWidgets.QDialog, FORM_CLASS):
     def reportCreatingOptions(self):
         if self.chbReport.isChecked():
             self.leReport.setEnabled(1)
-            self.pushButton1.setEnabled(1)
+            self.chbReport.setEnabled(1)
             self.rbCreateNew.setEnabled(1)
             self.rbAdd.setEnabled(1)
         else:
             self.leReport.setEnabled(0)
-            self.pushButton1.setEnabled(0)
+            self.chbReport.setEnabled(0)
             self.rbCreateNew.setEnabled(0)
             self.rbAdd.setEnabled(0)
 
