@@ -2,7 +2,6 @@
 
 This is repository contains code of QGIS 3 plugin, developed by AGH Cracow - KNGK Geoinformatyka Scientific Circle as part of Rector's grant.
 Project title: "Improving possibilities of GIS Open Source Software by project, developed and public QGIS plugin"
-
 This plugin calculate volume based on input raster data. 
 The user can set the reference level and select the AOI by create vector layer.
 
