@@ -25,7 +25,7 @@ hasProcessingProvider=no
 # Tags are comma separated with spaces allowed
 tags=python, raster, volume, dem
 
-homepage=http://www.kngk.agh.edu.pl/
+homepage=http://www.kngk.agh.edu.pl/?page_id=273
 category=Raster
 icon=icon.png
 # experimental flag
